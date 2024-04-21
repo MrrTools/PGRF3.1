@@ -9,6 +9,7 @@ uniform int uFunction;
 uniform float uTime;
 uniform mat4 uModel;
 uniform float uMorph;
+uniform vec3 uSecond;
 
 uniform sampler2D texture1;
 uniform sampler2D texture2;
@@ -18,8 +19,23 @@ uniform vec3 color2;
 
 out vec3 fragPos;
 out vec3 Normal;
-out vec2 TexCoords;
+out vec2 texCoords;
 out vec4 outColor;
+
+uniform vec3 lightPosition;
+out vec3 lightDirection;
+out float lightDistance;
+
+uniform vec3 eyePosition;
+
+out vec3 objectPosition;
+out vec3 normalDirection;
+out vec3 eyePos;
+
+struct vec3Pair {
+    vec3 first;
+    vec3 second;
+};
 
 // Sfericke
 vec3 graphulus(vec2 inPos) {
@@ -35,6 +51,25 @@ vec3 graphulus(vec2 inPos) {
     return vec3(x, y, z);
 }
 
+vec3 graphulusNormal(vec2 inPos) {
+
+    vec3 dx = graphulus(inPos + vec2(0.001, 0)) - graphulus(inPos - vec2(0.001, 0));
+    vec3 dy = graphulus(inPos + vec2(0, 0.001)) - graphulus(inPos - vec2(0, 0.001));
+
+    return cross(dx, dy);
+}
+
+vec3 getLightSphere(vec2 vec) {
+    float az = vec.x * PI;// <-1;1> -> <-PI;PI>
+    float ze = vec.y * PI / 2.0;// <-1;1> -> <-PI/2;PI/2>
+    float r = 0.1;
+
+    float x = r * cos(az) * cos(ze);
+    float y =  r * sin(az) * cos(ze);
+    float z =  r * sin(ze);
+    return vec3(x, y, z);
+}
+
 // Kartezske
 vec3 valec(vec2 inPos) {
     inPos.x *= 6.3f;
@@ -44,6 +79,14 @@ vec3 valec(vec2 inPos) {
     float y = sin(inPos.x) * r;
     float z = inPos.y;
     return vec3(x, y, z);
+}
+
+vec3 valecNormal(vec2 inPos) {
+
+    vec3 dx = valec(inPos + vec2(0.001, 0)) - valec(inPos - vec2(0.001, 0));
+    vec3 dy = valec(inPos + vec2(0, 0.001)) - valec(inPos - vec2(0, 0.001));
+
+    return cross(dx, dy);
 }
 
 //Cylindricke
@@ -57,6 +100,14 @@ vec3 unknown(vec2 inPos) {
     float y = sin(azimut) * r;
     float z = sin(v);
     return vec3(x, y, z);
+}
+
+vec3 unknownNormal(vec2 inPos) {
+
+    vec3 dx = unknown(inPos + vec2(0.001, 0)) - unknown(inPos - vec2(0.001, 0));
+    vec3 dy = unknown(inPos + vec2(0, 0.001)) - unknown(inPos - vec2(0, 0.001));
+
+    return cross(dx, dy);
 }
 
 //sfericke
@@ -74,6 +125,14 @@ vec3 gula(vec2 inPos) {
     return vec3(x, y, z);
 }
 
+vec3 gulaNormal(vec2 inPos) {
+
+    vec3 dx = gula(inPos + vec2(0.001, 0)) - gula(inPos - vec2(0.001, 0));
+    vec3 dy = gula(inPos + vec2(0, 0.001)) - gula(inPos - vec2(0, 0.001));
+
+    return cross(dx, dy);
+}
+
 vec3 kuzel(vec2 inPos) {
     inPos.x = mod(inPos.x, 1.0);
     inPos.y = mod(inPos.y, 1.0);
@@ -88,6 +147,14 @@ vec3 kuzel(vec2 inPos) {
     return vec3(x, y, z);
 }
 
+vec3 kuzelNormal(vec2 inPos) {
+
+    vec3 dx = kuzel(inPos + vec2(0.001, 0)) - kuzel(inPos - vec2(0.001, 0));
+    vec3 dy = kuzel(inPos + vec2(0, 0.001)) - kuzel(inPos - vec2(0, 0.001));
+
+    return cross(dx, dy);
+}
+
 //cylindricke
 vec3 sombrero(vec2 inPos) {
     float r = inPos.x * 2.f * PI;
@@ -99,39 +166,68 @@ vec3 sombrero(vec2 inPos) {
     return vec3(x, y, z);
 }
 
-vec3 posCalc(vec2 inPosition) {
+vec3 sombreroNormal(vec2 inPos) {
+
+    vec3 dx = sombrero(inPos + vec2(0.001, 0)) - sombrero(inPos - vec2(0.001, 0));
+    vec3 dy = sombrero(inPos + vec2(0, 0.001)) - sombrero(inPos - vec2(0, 0.001));
+
+    return cross(dx, dy);
+}
+
+vec3Pair posCalc(vec2 inPosition) {
     vec3 pos1, pos2;
+    vec3Pair result;
     switch (uFunction) {
         case 0: pos1 = graphulus(inPosition);
                 pos2 = valec(inPosition);
-                return mix(pos1, pos2, uMorph);
-        case 2: return graphulus(inPosition);
-        case 3: return valec(inPosition);
-        case 4: return unknown(inPosition);
-        case 5: return gula(inPosition);
-        case 6: return kuzel(inPosition);
-        case 7: return sombrero(inPosition);
-        default: return vec3(inPosition, 0.f);
+                result.first = mix(pos1, pos2, uMorph);
+                return result;
+        case 2: result.first = graphulus(inPosition);
+                result.second = graphulusNormal(inPosition);
+                return result;
+        case 3: result.first = valec(inPosition);
+                result.second = valecNormal(inPosition);
+                return result;
+        case 4: result.first = unknown(inPosition);
+                result.second = unknownNormal(inPosition);
+                return result;
+        case 5: result.first = gula(inPosition);
+                result.second = gulaNormal(inPosition);
+                return result;
+        case 6: result.first = kuzel(inPosition);
+                result.second = kuzelNormal(inPosition);
+                return result;
+        case 7: result.first = sombrero(inPosition);
+                result.second = sombreroNormal(inPosition);
+                return result;
+        case 8: result.first = getLightSphere(inPosition);
+                return result;
+        default: result.first = vec3(inPosition, 0.f);
+        return result;
     }
 }
 
 void main() {
+    texCoords = inPosition;
     vec2 newPos = inPosition * 2 - 1;
-    float x, y, z;
-
+    vec3 object = posCalc(inPosition).first;
+    vec3 normal = posCalc(inPosition).second;
     vec4 objectPosition;
-    objectPosition = uView * vec4(posCalc(inPosition), 1.f);
-    TexCoords = inPosition;
-    gl_Position = uProj * objectPosition;
 
-    vec4 textureColor = mix(texture(texture1, TexCoords), texture(texture2, TexCoords), uMorph);
+    vec3 secondObjectPosition = uSecond;
+    float x, y, z;
+    vec3Pair result = posCalc(inPosition);
 
-    vec3 finalColor = mix(color1, color2, uMorph) * textureColor.rgb;
+    objectPosition = uView * vec4(object, 1.f);
+    normalDirection = inverse(transpose(mat3(uModel))) * normal;
 
-    outColor = vec4(finalColor, textureColor.a);
+    vec4 finalPos4 = uModel * vec4(object,1.0);
+    lightDirection = normalize(lightPosition - finalPos4.xyz);
 
-  /*  fragPos = vec3(x, y, z);
-    TexCoords = inPosition;
+    eyePos = normalize(eyePosition - finalPos4.xyz);
 
-    gl_Position = uProj * uView * vec4(fragPos, 1.0);*/
+    lightDistance = length(lightPosition - finalPos4.xyz);
+
+    vec4 pos4 = vec4(object, 1.0);
+    gl_Position = uProj * uView *  uModel * pos4;
 }

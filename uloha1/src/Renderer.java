@@ -1,5 +1,6 @@
 import lwjglutils.OGLTexture2D;
 import lwjglutils.ShaderUtils;
+import lwjglutils.ToFloatArray;
 import org.lwjgl.glfw.GLFWCursorPosCallback;
 import org.lwjgl.glfw.GLFWKeyCallback;
 import org.lwjgl.glfw.GLFWMouseButtonCallback;
@@ -19,7 +20,7 @@ public class Renderer extends AbstractRenderer {
     public static final float STEP = 0.2f;
     public static final int WIDTH = 800;
     public static final int HEIGHT = 600;
-    private int shaderProgramTriangle, shaderProgramGrid;
+    private int shaderProgramGrid;
     private OGLTexture2D textureForObjects;
     private Grid grid;
     private Camera camera;
@@ -34,29 +35,29 @@ public class Renderer extends AbstractRenderer {
     float colorType = 0;
     private float uMorph;
     private float speed = 1.0f;
+    private int lightType = 0;
+
+    Vec3D lightPos;
+    private Mat4 lightTransl;
+    private double ligtSpeed;
+    private int locLightPosition;
+    private int typeLocation;
 
     @Override
     public void init() {
 
         camera = new Camera()
-                .withPosition(new Vec3D(0f, -2f, 2.f))
-                .withAzimuth(Math.toRadians(90))
-                .withZenith(Math.toRadians(-45))
-                .withFirstPerson(true);
+                .withPosition(new Vec3D(3, 3, 3))
+                .withAzimuth(5 / 4f * Math.PI)
+                .withZenith(-1 / 5f * Math.PI);
 
-        proj = new Mat4PerspRH(Math.PI / 4, height / (float) width, 0.1f, 100.f);
+        proj = new Mat4PerspRH(Math.PI / 3, height / (float) width, 0.1f, 20);
 
         model = new Mat4Identity();
         rotation = new Mat4Identity();
         translation = new Mat4Identity();
 
-        shaderProgramTriangle = ShaderUtils.loadProgram("/triangle");
-        glUseProgram(shaderProgramTriangle);
-
-        int uColor = glGetUniformLocation(shaderProgramTriangle, "uColor");
-        glUniform3fv(uColor, new float[]{0.0f, 1.0f, 0.0f});
-
-        grid = new Grid(20, 20, GridEnum.LIST);
+        grid = new Grid(50, 50, GridEnum.LIST);
         shaderProgramGrid = ShaderUtils.loadProgram("/grid");
         glUseProgram(shaderProgramGrid);
 
@@ -73,6 +74,12 @@ public class Renderer extends AbstractRenderer {
         glUniform1f(uColors, colorType);
 
 
+        typeLocation = glGetUniformLocation(shaderProgramGrid, "type");
+        locLightPosition = glGetUniformLocation(shaderProgramGrid, "lightPosition");
+
+        lightPos = new Vec3D(3, 3, 2);
+
+
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 
@@ -82,13 +89,16 @@ public class Renderer extends AbstractRenderer {
             e.printStackTrace();
         }
 
+        lightTransl = new Mat4Transl(lightPos);
+
         textureForObjects.bind(shaderProgramGrid, "textureForObjects", 0);
 
     }
 
     @Override
     public void display() {
-        glClearColor(1.0f, 1.0f, 0.5f, 1.0f);
+        //glEnable(GL_DEPTH_TEST);
+        glClearColor(0.5f, 1.0f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         int uView = glGetUniformLocation(shaderProgramGrid, "uView");
@@ -112,6 +122,24 @@ public class Renderer extends AbstractRenderer {
         uMorph = (float) Math.sin(glfwGetTime() * speed) * 0.5f + 0.5f;
         int uMorphLocation = glGetUniformLocation(shaderProgramGrid, "uMorph");
         glUniform1f(uMorphLocation, uMorph);
+
+        int uModel = glGetUniformLocation(shaderProgramGrid, "uModel");
+
+        glUniform3fv(locLightPosition, ToFloatArray.convert(lightPos));
+        ligtSpeed += 0.01;
+
+        double lightX = 2 * Math.sin(ligtSpeed);
+        double lightY = 2 * Math.cos(ligtSpeed);
+        lightPos = new Vec3D(lightX, lightY, 1.5);
+
+        lightTransl = new Mat4Transl(lightPos);
+        glUniform1f(typeLocation, functionType);
+
+        glUniform1f(typeLocation, 8f);
+
+        glUniformMatrix4fv(uModel, false, ToFloatArray.convert(lightTransl));
+       // glDisable(GL_DEPTH_TEST);
+
     }
 
     private GLFWKeyCallback keyCallback = new GLFWKeyCallback() {
@@ -134,7 +162,7 @@ public class Renderer extends AbstractRenderer {
                     case GLFW_KEY_D -> camera = camera.right(STEP);
                     case GLFW_KEY_S -> camera = camera.down(STEP);
                     case GLFW_KEY_A -> camera = camera.left(STEP);
-                    case GLFW_KEY_P -> proj = new Mat4PerspRH(Math.PI / 3, HEIGHT / (float) WIDTH, 0.1, 20);
+                    case GLFW_KEY_P -> proj = new Mat4PerspRH(Math.PI / 3, height / (float) width, 0.1f, 20);
                     case GLFW_KEY_O -> proj = new Mat4OrthoRH(2.5, 2.5, 0.1, 20);
                     case GLFW_KEY_KP_ADD -> speed = speed + 0.5f;
                     case GLFW_KEY_KP_SUBTRACT -> {
@@ -144,7 +172,7 @@ public class Renderer extends AbstractRenderer {
                         }
                     }
                     case GLFW_KEY_C -> {
-                        if (colorType == 7) {
+                        if (colorType == 9) {
                             colorType = 0;
                         } else {
                             colorType = colorType + 1;
@@ -187,7 +215,6 @@ public class Renderer extends AbstractRenderer {
 
                     oldx = x;
                     oldy = y;
-
                 }
             }
         }

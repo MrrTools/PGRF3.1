@@ -1,36 +1,29 @@
 #version 330
 #define PI 3.1415926538
-
 in vec2 inPosition;
+
 
 uniform mat4 uView;
 uniform mat4 uProj;
-uniform int uFunction;
+uniform float uFunction;
 uniform float uTime;
 uniform mat4 uModel;
 uniform float uMorph;
-uniform vec3 uSecond;
 
-uniform sampler2D texture1;
-uniform sampler2D texture2;
-
-uniform vec3 color1;
-uniform vec3 color2;
-
-out vec3 fragPos;
-out vec3 Normal;
-out vec2 texCoords;
-out vec4 outColor;
 
 uniform vec3 lightPosition;
-out vec3 lightDirection;
-out float lightDistance;
-
 uniform vec3 eyePosition;
+
+uniform  float spotCutOff;
+
+uniform float colorType;
+out vec2 texCoords;
 
 out vec3 objectPosition;
 out vec3 normalDirection;
-out vec3 eyePos;
+out vec3 lightDirection;
+out vec3 eyeVec;
+out float lightDistance;
 
 struct vec3Pair {
     vec3 first;
@@ -44,7 +37,7 @@ vec3 graphulus(vec2 inPos) {
     float theta = inPos.x * 2.0 * PI;
     float phi = inPos.y * PI;
     float radius = 3.0 + cos(phi);
-    float x = cos(theta) * radius;
+    float x = cos(theta) * radius ;
     float y = sin(theta) * radius;
     float z = sin(phi);
 
@@ -59,15 +52,15 @@ vec3 graphulusNormal(vec2 inPos) {
     return cross(dx, dy);
 }
 
-vec3 getLightSphere(vec2 vec) {
-    float az = vec.x * PI;// <-1;1> -> <-PI;PI>
-    float ze = vec.y * PI / 2.0;// <-1;1> -> <-PI/2;PI/2>
+vec3 lightSphere(vec2 vec) {
+    float az = vec.x * PI;
+    float ze = vec.y * PI / 2.0;
     float r = 0.1;
 
     float x = r * cos(az) * cos(ze);
     float y =  r * sin(az) * cos(ze);
     float z =  r * sin(ze);
-    return vec3(x, y, z);
+    return  vec3( 6 * x, 6 *y, 6 * z);
 }
 
 // Kartezske
@@ -78,7 +71,7 @@ vec3 valec(vec2 inPos) {
     float x = cos(inPos.x) * r;
     float y = sin(inPos.x) * r;
     float z = inPos.y;
-    return vec3(x, y, z);
+    return vec3(x* 0.5, y* 0.5, z* 0.5);
 }
 
 vec3 valecNormal(vec2 inPos) {
@@ -177,57 +170,62 @@ vec3 sombreroNormal(vec2 inPos) {
 vec3Pair posCalc(vec2 inPosition) {
     vec3 pos1, pos2;
     vec3Pair result;
-    switch (uFunction) {
+    int func = int(uFunction);
+    switch (func) {
+        //tato fukcia nema nastavene svetlo
         case 0: pos1 = graphulus(inPosition);
-                pos2 = valec(inPosition);
-                result.first = mix(pos1, pos2, uMorph);
-                return result;
+        pos2 = valec(inPosition);
+        result.first = mix(pos1, pos2, uMorph);
+        return result;
         case 2: result.first = graphulus(inPosition);
-                result.second = graphulusNormal(inPosition);
-                return result;
+        result.second = graphulusNormal(inPosition);
+        return result;
         case 3: result.first = valec(inPosition);
-                result.second = valecNormal(inPosition);
-                return result;
+        result.second = valecNormal(inPosition);
+        return result;
         case 4: result.first = unknown(inPosition);
-                result.second = unknownNormal(inPosition);
-                return result;
+        result.second = unknownNormal(inPosition);
+        return result;
         case 5: result.first = gula(inPosition);
-                result.second = gulaNormal(inPosition);
-                return result;
+        result.second = gulaNormal(inPosition);
+        return result;
         case 6: result.first = kuzel(inPosition);
-                result.second = kuzelNormal(inPosition);
-                return result;
+        result.second = kuzelNormal(inPosition);
+        return result;
         case 7: result.first = sombrero(inPosition);
-                result.second = sombreroNormal(inPosition);
-                return result;
-        case 8: result.first = getLightSphere(inPosition);
-                return result;
-        default: result.first = vec3(inPosition, 0.f);
+        result.second = sombreroNormal(inPosition);
+        return result;
+        case 8: result.first = lightSphere(inPosition);
+        return result;
+        case 1: result.first =   3 * vec3(inPosition, 0.f);
+                result.second =  vec3(0.f, 0.f, 1.f);
+        return result;
+        default: result.first = vec3(0.f, 0.f, 0.f);
         return result;
     }
 }
 
+
+
 void main() {
     texCoords = inPosition;
-    vec2 newPos = inPosition * 2 - 1;
-    vec3 object = posCalc(inPosition).first;
+    vec2 position = inPosition * 2 - 1;
+    vec3 object = 0.25 * posCalc(inPosition).first;
     vec3 normal = posCalc(inPosition).second;
-    vec4 objectPosition;
 
-    vec3 secondObjectPosition = uSecond;
-    float x, y, z;
-    vec3Pair result = posCalc(inPosition);
-
-    objectPosition = uView * vec4(object, 1.f);
+    objectPosition = object;
     normalDirection = inverse(transpose(mat3(uModel))) * normal;
 
     vec4 finalPos4 = uModel * vec4(object,1.0);
+
     lightDirection = normalize(lightPosition - finalPos4.xyz);
 
-    eyePos = normalize(eyePosition - finalPos4.xyz);
+    eyeVec = normalize(eyePosition - finalPos4.xyz);
 
     lightDistance = length(lightPosition - finalPos4.xyz);
 
     vec4 pos4 = vec4(object, 1.0);
     gl_Position = uProj * uView *  uModel * pos4;
+
+
 }

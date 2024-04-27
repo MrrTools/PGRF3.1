@@ -1,3 +1,4 @@
+import lwjglutils.OGLRenderTarget;
 import lwjglutils.OGLTexture2D;
 import lwjglutils.ShaderUtils;
 import lwjglutils.ToFloatArray;
@@ -10,38 +11,67 @@ import solids.Grid;
 import solids.GridEnum;
 import transforms.*;
 
+
 import java.io.IOException;
 
 import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.opengl.GL30.*;
 
 public class Renderer extends AbstractRenderer {
 
+    //konstanty
     public static final float STEP = 0.2f;
     public static final int WIDTH = 800;
     public static final int HEIGHT = 600;
+
+    //shadre
     private int shaderProgramGrid;
-    private OGLTexture2D textureForObjects;
-    private Grid grid;
+    private int shaderProgramPostProcessing;
+
+    //kamera
     private Camera camera;
+
+    //projekce
+    private Grid grid;
+    private Grid postQuad;
+
+    //textura
+    private OGLTexture2D textureForObjects;
+
+    //uniforms
+    private int uView;
+    private int uProj;
+    private int uFunction;
+    private int uModel;
+    private int uLightPosition;
+    private float uMorph;
+    private int uColor;
+    private int uTime;
+
+    //transforamacie
     private Mat4 proj;
+    private Mat4 lightTransl;
     Mat4 model;
     Mat4 rotation;
     Mat4 translation;
-    private int functionType = 1;
-    private int button;
+
+
+    //premenne
+    private float speed = 1.0f;
+    private float colorType = 0;
+    private float functionType = 1;
+    private int mode = 1;
+
+
     private boolean mousePressed = false;
     private double oldx, oldy;
-    float colorType = 0;
-    private float uMorph;
-    private float speed = 1.0f;
-    private int lightType = 0;
-
+    private OGLRenderTarget renderTarget;
+    private int button;
     Vec3D lightPos;
-    private Mat4 lightTransl;
     private double ligtSpeed;
-    private int locLightPosition;
-    private int typeLocation;
+
 
     @Override
     public void init() {
@@ -51,7 +81,7 @@ public class Renderer extends AbstractRenderer {
                 .withAzimuth(5 / 4f * Math.PI)
                 .withZenith(-1 / 5f * Math.PI);
 
-        proj = new Mat4PerspRH(Math.PI / 3, height / (float) width, 0.1f, 20);
+        proj = new Mat4PerspRH(Math.PI / 3, height / (float) width, 0.1f, 100);
 
         model = new Mat4Identity();
         rotation = new Mat4Identity();
@@ -61,27 +91,20 @@ public class Renderer extends AbstractRenderer {
         shaderProgramGrid = ShaderUtils.loadProgram("/grid");
         glUseProgram(shaderProgramGrid);
 
-        int uView = glGetUniformLocation(shaderProgramGrid, "uView");
-        glUniformMatrix4fv(uView, false, camera.getViewMatrix().floatArray());
+        postQuad = new Grid(2, 2, GridEnum.LIST);
+        shaderProgramPostProcessing = ShaderUtils.loadProgram("/postProcessing");
 
-        int uProj = glGetUniformLocation(shaderProgramGrid, "uProj");
-        glUniformMatrix4fv(uProj, false, proj.floatArray());
+        uView = glGetUniformLocation(shaderProgramGrid, "uView");
+        uProj = glGetUniformLocation(shaderProgramGrid, "uProj");
+        uFunction = glGetUniformLocation(shaderProgramGrid, "uFunction");
+        uModel = glGetUniformLocation(shaderProgramGrid, "uModel");
+        uColor = glGetUniformLocation(shaderProgramGrid, "colorType");
+        uLightPosition = glGetUniformLocation(shaderProgramGrid, "lightPosition");
+        uTime = glGetUniformLocation(shaderProgramGrid, "uTime");
 
-        int uFunction = glGetUniformLocation(shaderProgramGrid, "uFunction");
-        glUniform1i(uFunction, functionType);
+        lightPos = new Vec3D(2, 2, 1.5);
 
-        int uColors = glGetUniformLocation(shaderProgramGrid, "uColors");
-        glUniform1f(uColors, colorType);
-
-
-        typeLocation = glGetUniformLocation(shaderProgramGrid, "type");
-        locLightPosition = glGetUniformLocation(shaderProgramGrid, "lightPosition");
-
-        lightPos = new Vec3D(3, 3, 2);
-
-
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
+        renderTarget = new OGLRenderTarget(800, 600);
 
         try {
             textureForObjects = new OGLTexture2D("textures/bricks.jpg");
@@ -90,57 +113,73 @@ public class Renderer extends AbstractRenderer {
         }
 
         lightTransl = new Mat4Transl(lightPos);
-
-        textureForObjects.bind(shaderProgramGrid, "textureForObjects", 0);
-
     }
 
     @Override
     public void display() {
-        //glEnable(GL_DEPTH_TEST);
+        glEnable(GL_DEPTH_TEST);
         glClearColor(0.5f, 1.0f, 0.5f, 1.0f);
+
+        glUseProgram(shaderProgramGrid);
+        renderTarget.bind();
+
+        glUniformMatrix4fv(uView, false, camera.getViewMatrix().floatArray());
+        glUniformMatrix4fv(uProj, false, ToFloatArray.convert(proj));
+        glUniform3fv(uLightPosition, ToFloatArray.convert(lightPos));
+        glUniformMatrix4fv(uModel, false, ToFloatArray.convert(model));
+
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        int uView = glGetUniformLocation(shaderProgramGrid, "uView");
-        glUniformMatrix4fv(uView, false, camera.getViewMatrix().floatArray());
-
-        int uProj = glGetUniformLocation(shaderProgramGrid, "uProj");
-        glUniformMatrix4fv(uProj, false, proj.floatArray());
-
-        int uFunction = glGetUniformLocation(shaderProgramGrid, "uFunction");
-        glUniform1i(uFunction, functionType);
-
-        int uTime = glGetUniformLocation(shaderProgramGrid, "uTime");
         glUniform1f(uTime, (float) glfwGetTime());
 
-        grid.getBuffers().draw(GL_TRIANGLES, shaderProgramGrid);
-        textureForObjects.bind(shaderProgramGrid, "textureForObjects", 0);
 
-        int uColors = glGetUniformLocation(shaderProgramGrid, "colorType");
-        glUniform1f(uColors, colorType);
+        glUniform1f(uFunction, functionType);
+        glUniform1f(uColor, colorType);
+
+        textureForObjects.bind(shaderProgramGrid, "textureForObjects", 0);
+        grid.getBuffers().draw(GL_TRIANGLES, shaderProgramGrid);
+
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        ligtSpeed += 0.01;
+        double lightX = 2 * Math.sin(ligtSpeed);
+        double lightY = 2 * Math.cos(ligtSpeed);
+        lightPos = new Vec3D(lightX, lightY, 1);
+
+        lightTransl = new Mat4Transl(lightPos);
 
         uMorph = (float) Math.sin(glfwGetTime() * speed) * 0.5f + 0.5f;
         int uMorphLocation = glGetUniformLocation(shaderProgramGrid, "uMorph");
         glUniform1f(uMorphLocation, uMorph);
 
-        int uModel = glGetUniformLocation(shaderProgramGrid, "uModel");
-
-        glUniform3fv(locLightPosition, ToFloatArray.convert(lightPos));
-        ligtSpeed += 0.01;
-
-        double lightX = 2 * Math.sin(ligtSpeed);
-        double lightY = 2 * Math.cos(ligtSpeed);
-        lightPos = new Vec3D(lightX, lightY, 1.5);
-
-        lightTransl = new Mat4Transl(lightPos);
-        glUniform1f(typeLocation, functionType);
-
-        glUniform1f(typeLocation, 8f);
+        glUniform1f(uFunction, 8f);
 
         glUniformMatrix4fv(uModel, false, ToFloatArray.convert(lightTransl));
-       // glDisable(GL_DEPTH_TEST);
+        grid.getBuffers().draw(GL_TRIANGLES, shaderProgramGrid);
+        renderPostProcessingQuad();
+
+
+        glDisable(GL_DEPTH_TEST);
 
     }
+
+    private void renderPostProcessingQuad() {
+        glViewport(0, 0, width, height);
+        glUseProgram(shaderProgramPostProcessing);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        renderTarget.getColorTexture().bind(shaderProgramPostProcessing, "textureScene", 0);
+        postQuad.getBuffers().draw(GL_TRIANGLES, shaderProgramPostProcessing);
+
+        switch (mode) {
+            case 0 -> glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            case 1 -> glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            case 2 -> glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+        }
+    }
+
 
     private GLFWKeyCallback keyCallback = new GLFWKeyCallback() {
         @Override
@@ -155,14 +194,14 @@ public class Renderer extends AbstractRenderer {
                     case GLFW_KEY_4 -> functionType = 4;
                     case GLFW_KEY_5 -> functionType = 5;
                     case GLFW_KEY_6 -> functionType = 6;
-                    case GLFW_KEY_7 -> glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                    case GLFW_KEY_8 -> glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                    case GLFW_KEY_9 -> glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+                    case GLFW_KEY_7 -> mode = 0;
+                    case GLFW_KEY_8 -> mode = 1;
+                    case GLFW_KEY_9 -> mode = 2;
                     case GLFW_KEY_W -> camera = camera.up(STEP);
                     case GLFW_KEY_D -> camera = camera.right(STEP);
                     case GLFW_KEY_S -> camera = camera.down(STEP);
                     case GLFW_KEY_A -> camera = camera.left(STEP);
-                    case GLFW_KEY_P -> proj = new Mat4PerspRH(Math.PI / 3, height / (float) width, 0.1f, 20);
+                    case GLFW_KEY_P -> proj = new Mat4PerspRH(Math.PI / 3, HEIGHT / (float) WIDTH, 0.1f, 100);
                     case GLFW_KEY_O -> proj = new Mat4OrthoRH(2.5, 2.5, 0.1, 20);
                     case GLFW_KEY_KP_ADD -> speed = speed + 0.5f;
                     case GLFW_KEY_KP_SUBTRACT -> {
@@ -172,13 +211,15 @@ public class Renderer extends AbstractRenderer {
                         }
                     }
                     case GLFW_KEY_C -> {
-                        if (colorType == 9) {
+                        if (colorType == 7) {
                             colorType = 0;
                         } else {
                             colorType = colorType + 1;
                             System.out.println(colorType);
                         }
                     }
+
+
                 }
             }
         }
@@ -213,6 +254,14 @@ public class Renderer extends AbstractRenderer {
                     camera = camera.addZenith(Math.PI / 2 * (oldy - y) / HEIGHT);
 
 
+                    oldx = x;
+                    oldy = y;
+                } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+
+                    double rotX = (oldx - x) / 50;
+                    double rotY = (oldy - y) / 50;
+                    rotation = rotation.mul(new Mat4RotXYZ(rotX, 0, rotY));
+                    model = rotation.mul(translation);
                     oldx = x;
                     oldy = y;
                 }

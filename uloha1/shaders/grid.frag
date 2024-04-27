@@ -1,6 +1,4 @@
 #version 330
-
-uniform vec3 lightPos;
 in vec2 texCoords;
 
 uniform sampler2D textureForObjects;
@@ -8,39 +6,33 @@ uniform sampler2D textureForObjects;
 uniform float constantAttenuation = 1.0;
 uniform float linearAttenuation = 0.1;
 uniform float quadraticAttenuation = 0.01;
-uniform float spotCutOff;
+uniform float spotCutOff = 0.5f;
 out vec4 outColor;
 in vec3 objectPosition;
 in vec3 normalDirection;
 in vec3 lightDirection;
-in vec3 eyePos;
+in vec3 eyeVec;
 in float lightDistance;
-uniform vec3 lightPosition;
 
 uniform float colorType;
-uniform vec3 yel;
+uniform vec3 lightPosition;
+uniform vec3 eyePosition;
 void main() {
     vec4 textureColor = texture(textureForObjects, texCoords);
     vec3 yld = normalize(lightDirection);
-    vec3 vd = normalize(eyePos);
+    vec3 vd = normalize(eyeVec);
     vec3 nd = normalize(normalDirection);
 
     vec3 yellowSpotDirection = -lightPosition;
-
-
-
 
     float yellowNDotL= max(dot(nd, yld), 0);
 
     vec3 yellowHalfVec = normalize(vd + yld);
     float yellowNDotH = pow(max(0, dot(nd, yellowHalfVec)), 16);
 
-
-
     float yellowAttentuation=1.0/(constantAttenuation +
     linearAttenuation * lightDistance +
     quadraticAttenuation * lightDistance * lightDistance);
-
 
 
     vec4 ambient = vec4(0.2, 0.2, 0.2, 1);
@@ -48,19 +40,14 @@ void main() {
     vec4 yellowDiffuse = vec4(yellowNDotL*vec3(1.5), 1);
     vec4 yellowSpec = vec4(yellowNDotH*vec3(0.6), 1);
 
-
     yellowDiffuse = vec4(yellowDiffuse.rgb * vec3(0.8, 0.8, 0.255), 1.0f);
     yellowSpec = vec4(yellowSpec.rgb * vec3(0.8, 0.8, 0.255), 1.0f);
 
 
     float yellowSpotEffect = max(dot(normalize(yellowSpotDirection), normalize(-yld)), 0);
-    float yellowBlend = clamp((yellowSpotEffect-spotCutOff)/(1-spotCutOff), 0.0, 1.0);
+    float yellowBlend = clamp((yellowSpotEffect-spotCutOff)/(1-spotCutOff), 0.0, 1.0);//orezani na rozsah <0;1>
 
     vec4 lighting = ambient;
-
-
-
-
 
     if (colorType == 0) {
         outColor = textureColor;
@@ -82,11 +69,6 @@ void main() {
     }
     if (colorType == 7){
         if (yellowSpotEffect > spotCutOff)  lighting = mix(ambient, ambient  + yellowAttentuation * (yellowSpec + yellowDiffuse), yellowBlend);
-        outColor = lighting* textureColor;
-    } else if (colorType == 8)  {
-        outColor = vec4(vec3(0.8, 0.8, 0.255), 1.0f);
-    }else if (colorType == 9) {
-        outColor = vec4(vec3(0.8, 0.255, 0.255), 1.0f);
+        outColor = lighting * textureColor;
     }
-
 }
